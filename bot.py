@@ -2,7 +2,7 @@ import os
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from pytube import YouTube
+import yt_dlp
 import psycopg2
 from dotenv import load_dotenv
 
@@ -20,15 +20,21 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# وظيفة لتحميل الملف من اليوتيوب
+# وظيفة لتحميل الملف من اليوتيوب باستخدام yt-dlp
 def download_youtube_audio(url):
-    yt = YouTube(url)
-    audio = yt.streams.filter(only_audio=True).first()
-    output_file = audio.download(output_path="downloads")
-    base, ext = os.path.splitext(output_file)
-    new_file = base + '.mp3'
-    os.rename(output_file, new_file)
-    return new_file
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(url, download=True)
+        file_path = ydl.prepare_filename(info_dict)
+        return file_path
 
 # وظيفة لإرسال الملف إلى القناة
 async def send_audio_to_channel(context, audio_file):
@@ -98,7 +104,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # وظيفة لبدء البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('يا هلا بابن عمي الذهب دزلي الرابط يا ذخب خل انزلك الفيديو صوت وتدلل ضلعي .')
+    await update.message.reply_text('مرحبًا! أرسل رابط يوتيوب لتحميل الملف الصوتي.')
 
 # وظيفة لمعالجة الأخطاء
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
