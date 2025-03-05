@@ -31,6 +31,7 @@ def download_youtube_audio(url):
         }],
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'ffmpeg_location': '/usr/bin/ffmpeg',  # تحديد مسار ffmpeg
+        'cookiefile': 'cookies.txt',  # استخدام ملف cookies.txt
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=True)
