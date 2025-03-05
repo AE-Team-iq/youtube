@@ -1,7 +1,7 @@
 import os
 import logging
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from pytube import YouTube
 import psycopg2
 from dotenv import load_dotenv
@@ -31,9 +31,9 @@ def download_youtube_audio(url):
     return new_file
 
 # وظيفة لإرسال الملف إلى القناة
-def send_audio_to_channel(context, audio_file):
+async def send_audio_to_channel(context, audio_file):
     with open(audio_file, 'rb') as audio:
-        message = context.bot.send_audio(chat_id=TELEGRAM_CHANNEL_ID, audio=audio)
+        message = await context.bot.send_audio(chat_id=TELEGRAM_CHANNEL_ID, audio=audio)
     return message.audio.file_id
 
 # وظيفة للاتصال بقاعدة البيانات
@@ -80,28 +80,28 @@ def check_db(youtube_url):
     return result[0] if result else None
 
 # وظيفة لمعالجة الرسائل
-def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     youtube_url = update.message.text
     file_id = check_db(youtube_url)
 
     if file_id:
-        context.bot.send_message(chat_id=update.message.chat_id, text=f"الملف موجود بالفعل: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
+        await update.message.reply_text(f"الملف موجود بالفعل: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
     else:
         try:
             audio_file = download_youtube_audio(youtube_url)
-            file_id = send_audio_to_channel(context, audio_file)
+            file_id = await send_audio_to_channel(context, audio_file)
             save_to_db(youtube_url, file_id, os.path.basename(audio_file))
-            context.bot.send_message(chat_id=update.message.chat_id, text=f"تم تحميل الملف: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
+            await update.message.reply_text(f"تم تحميل الملف: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
         except Exception as e:
             logger.error(f"Error: {e}")
-            context.bot.send_message(chat_id=update.message.chat_id, text="حدث خطأ أثناء تحميل الملف.")
+            await update.message.reply_text("حدث خطأ أثناء تحميل الملف.")
 
 # وظيفة لبدء البوت
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text('مرحبًا! أرسل رابط يوتيوب لتحميل الملف الصوتي.')
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text('يا هلا بابن عمي الذهب دزلي الرابط يا ذخب خل انزلك الفيديو صوت وتدلل ضلعي .')
 
 # وظيفة لمعالجة الأخطاء
-def error(update: Update, context: CallbackContext):
+async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f'Update {update} caused error {context.error}')
 
 # وظيفة رئيسية لتشغيل البوت
@@ -110,15 +110,14 @@ def main():
     create_table()
 
     # بدء تشغيل البوت
-    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    dp.add_error_handler(error)
+    # إضافة handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    updater.start_polling()
-    updater.idle()
+    # تشغيل البوت
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
