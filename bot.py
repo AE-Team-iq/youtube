@@ -23,16 +23,21 @@ logger = logging.getLogger(__name__)
 # وظيفة لتحميل الملف من اليوتيوب باستخدام yt-dlp
 def download_youtube_audio(url):
     ydl_opts = {
-        'format': 'bestaudio/best',
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'ffmpeg_location': '/usr/bin/ffmpeg',  # تحديد مسار ffmpeg
-        'cookiefile': 'cookies.txt',  # استخدام ملف cookies.txt
-    }
+    'format': 'bestaudio/best',
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'mp3',
+        'preferredquality': '192',
+    }],
+    'outtmpl': 'downloads/%(title)s.%(ext)s',
+    'ffmpeg_location': '/usr/bin/ffmpeg',
+    'cookiefile': 'cookies.txt',
+    'extractor_args': {
+        'youtube': {
+            'skip': ['authcheck'],  # تجاوز التحقق من الهوية
+        },
+    },
+}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=True)
         file_path = ydl.prepare_filename(info_dict)
