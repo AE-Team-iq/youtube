@@ -2,3 +2,4 @@ python-telegram-bot
 pytube
 psycopg2-binary
 python-dotenv
+yt_dlp
