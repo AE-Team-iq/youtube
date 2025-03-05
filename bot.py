@@ -3,21 +3,18 @@ import logging
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 from pytube import YouTube
-import requests
 import psycopg2
+from dotenv import load_dotenv
 
-# إعدادات قاعدة البيانات
-DATABASE_URL = os.environ['DATABASE_URL']
+# تحميل المتغيرات البيئية من ملف .env
+load_dotenv()
 
 # إعدادات البوت
-TELEGRAM_BOT_TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
-TELEGRAM_CHANNEL_ID = os.environ['TELEGRAM_CHANNEL_ID']
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHANNEL_ID = os.getenv('TELEGRAM_CHANNEL_ID')
 
-# إعدادات اليوتيوب
-YOUTUBE_API_KEY = os.environ['YOUTUBE_API_KEY']
-
-# إعدادات السيرفر
-SERVER_URL = os.environ['SERVER_URL']
+# إعدادات قاعدة البيانات
+DATABASE_URL = os.getenv('DATABASE_URL')
 
 # إعدادات التسجيل
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -39,20 +36,44 @@ def send_audio_to_channel(context, audio_file):
         message = context.bot.send_audio(chat_id=TELEGRAM_CHANNEL_ID, audio=audio)
     return message.audio.file_id
 
+# وظيفة للاتصال بقاعدة البيانات
+def connect_to_db():
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    return conn
+
+# وظيفة لإنشاء الجدول إذا لم يكن موجودًا
+def create_table():
+    conn = connect_to_db()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS audio_files (
+            id SERIAL PRIMARY KEY,
+            youtube_url TEXT NOT NULL,
+            file_id TEXT NOT NULL,
+            file_name TEXT NOT NULL
+        );
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
 # وظيفة لحفظ المعلومات في قاعدة البيانات
 def save_to_db(youtube_url, file_id, file_name):
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    conn = connect_to_db()
     cur = conn.cursor()
-    cur.execute("INSERT INTO audio_files (youtube_url, file_id, file_name) VALUES (%s, %s, %s)", (youtube_url, file_id, file_name))
+    cur.execute("""
+        INSERT INTO audio_files (youtube_url, file_id, file_name)
+        VALUES (%s, %s, %s);
+    """, (youtube_url, file_id, file_name))
     conn.commit()
     cur.close()
     conn.close()
 
 # وظيفة للتحقق من وجود الملف في قاعدة البيانات
 def check_db(youtube_url):
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    conn = connect_to_db()
     cur = conn.cursor()
-    cur.execute("SELECT file_id FROM audio_files WHERE youtube_url = %s", (youtube_url,))
+    cur.execute("SELECT file_id FROM audio_files WHERE youtube_url = %s;", (youtube_url,))
     result = cur.fetchone()
     cur.close()
     conn.close()
@@ -64,13 +85,13 @@ def handle_message(update: Update, context: CallbackContext):
     file_id = check_db(youtube_url)
 
     if file_id:
-        context.bot.send_message(chat_id=update.message.chat_id, text=f"الملف موجود بالفعل: {SERVER_URL}/file/{file_id}")
+        context.bot.send_message(chat_id=update.message.chat_id, text=f"الملف موجود بالفعل: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
     else:
         try:
             audio_file = download_youtube_audio(youtube_url)
             file_id = send_audio_to_channel(context, audio_file)
             save_to_db(youtube_url, file_id, os.path.basename(audio_file))
-            context.bot.send_message(chat_id=update.message.chat_id, text=f"تم تحميل الملف: {SERVER_URL}/file/{file_id}")
+            context.bot.send_message(chat_id=update.message.chat_id, text=f"تم تحميل الملف: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
         except Exception as e:
             logger.error(f"Error: {e}")
             context.bot.send_message(chat_id=update.message.chat_id, text="حدث خطأ أثناء تحميل الملف.")
@@ -85,6 +106,10 @@ def error(update: Update, context: CallbackContext):
 
 # وظيفة رئيسية لتشغيل البوت
 def main():
+    # إنشاء الجدول إذا لم يكن موجودًا
+    create_table()
+
+    # بدء تشغيل البوت
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
 
