@@ -30,6 +30,7 @@ def download_youtube_audio(url):
             'preferredquality': '192',
         }],
         'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'ffmpeg_location': '/usr/bin/ffmpeg',  # تحديد مسار ffmpeg
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=True)
@@ -104,7 +105,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # وظيفة لبدء البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('مرحبًا! أرسل رابط يوتيوب لتحميل الملف الصوتي.')
+    await update.message.reply_text('يا هلا بالغالي .... دزلي الرابط حتى ادزلك الملف الصوتي .')
 
 # وظيفة لمعالجة الأخطاء
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
