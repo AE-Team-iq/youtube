@@ -49,7 +49,7 @@ def get_video_info(video_id):
 
 # وظيفة لتحميل الملف من اليوتيوب باستخدام yt-dlp
 def download_youtube_audio(url):
-    ydl_opts = {
+     ydl_opts = {
         'format': 'bestaudio/best',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
@@ -57,7 +57,8 @@ def download_youtube_audio(url):
             'preferredquality': '192',
         }],
         'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'ffmpeg_location': '/usr/bin/ffmpeg',  # تحديد مسار ffmpeg
+        'ffmpeg_location': '/usr/bin/ffmpeg',
+        'cookiefile': 'cookies.txt',  # أضف هذا السطر
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=True)
