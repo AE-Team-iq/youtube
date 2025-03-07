@@ -1,6 +1,7 @@
 import os
 import logging
 import re
+import uuid
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
@@ -25,6 +26,9 @@ if not YOUTUBE_API_KEY:
 
 # إعدادات ملفات تعريف الارتباط (cookies)
 COOKIES_CONTENT = os.getenv('COOKIES_CONTENT')
+
+# المسار المطلق لمجلد downloads
+DOWNLOADS_DIR = os.path.abspath('downloads')
 
 # إعدادات التسجيل
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -58,13 +62,13 @@ def get_video_info(video_id):
 def download_youtube_audio(url):
     try:
         # إنشاء مجلد downloads إذا لم يكن موجودًا
-        if not os.path.exists('downloads'):
-            os.makedirs('downloads')
+        if not os.path.exists(DOWNLOADS_DIR):
+            os.makedirs(DOWNLOADS_DIR)
 
         # إنشاء ملف cookies.txt مؤقتًا إذا كان COOKIES_CONTENT موجودًا
         cookies_file = None
         if COOKIES_CONTENT:
-            cookies_file = 'cookies.txt'
+            cookies_file = os.path.join(DOWNLOADS_DIR, 'cookies.txt')
             with open(cookies_file, 'w') as f:
                 f.write(COOKIES_CONTENT)
 
@@ -76,8 +80,9 @@ def download_youtube_audio(url):
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
-            'outtmpl': 'downloads/%(title)s.%(ext)s',
+            'outtmpl': os.path.join(DOWNLOADS_DIR, '%(title)s.%(ext)s'),
             'ffmpeg_location': '/usr/bin/ffmpeg',
+            'verbose': True,  # تفعيل وضع التصحيح
         }
 
         # استخدام ملف cookies.txt إذا كان موجودًا
@@ -88,9 +93,8 @@ def download_youtube_audio(url):
             info_dict = ydl.extract_info(url, download=True)
             file_path = ydl.prepare_filename(info_dict)
             
-            # تنظيف اسم الملف
-            base, ext = os.path.splitext(file_path)
-            new_file = os.path.join('downloads', sanitize_filename(os.path.basename(base)) + ext)
+            # إنشاء اسم ملف عشوائي
+            new_file = os.path.join(DOWNLOADS_DIR, f"{uuid.uuid4()}.mp3")
             
             # نقل الملف إلى المسار الجديد
             os.rename(file_path, new_file)
