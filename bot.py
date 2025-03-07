@@ -3,6 +3,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
+from googleapiclient.discovery import build
 import psycopg2
 from dotenv import load_dotenv
 
@@ -16,28 +17,37 @@ TELEGRAM_CHANNEL_ID = os.getenv('TELEGRAM_CHANNEL_ID')
 # إعدادات قاعدة البيانات
 DATABASE_URL = os.getenv('DATABASE_URL')
 
+# إعدادات YouTube Data API
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
+
 # إعدادات التسجيل
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# وظيفة للحصول على معلومات الفيديو باستخدام YouTube Data API
+def get_video_info(video_id):
+    youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
+    request = youtube.videos().list(
+        part="snippet,contentDetails",
+        id=video_id
+    )
+    response = request.execute()
+    if 'items' in response and response['items']:
+        return response['items'][0]
+    return None
+
 # وظيفة لتحميل الملف من اليوتيوب باستخدام yt-dlp
 def download_youtube_audio(url):
     ydl_opts = {
-    'format': 'bestaudio/best',
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '192',
-    }],
-    'outtmpl': 'downloads/%(title)s.%(ext)s',
-    'ffmpeg_location': '/usr/bin/ffmpeg',
-    'cookiefile': 'cookies.txt',
-    'extractor_args': {
-        'youtube': {
-            'skip': ['authcheck'],  # تجاوز التحقق من الهوية
-        },
-    },
-}
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'ffmpeg_location': '/usr/bin/ffmpeg',  # تحديد مسار ffmpeg
+    }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=True)
         file_path = ydl.prepare_filename(info_dict)
@@ -95,6 +105,14 @@ def check_db(youtube_url):
 # وظيفة لمعالجة الرسائل
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     youtube_url = update.message.text
+    video_id = youtube_url.split('v=')[1]  # استخراج معرف الفيديو من الرابط
+
+    # الحصول على معلومات الفيديو باستخدام YouTube Data API
+    video_info = get_video_info(video_id)
+    if not video_info:
+        await update.message.reply_text("تعذر الحصول على معلومات الفيديو.")
+        return
+
     file_id = check_db(youtube_url)
 
     if file_id:
@@ -111,7 +129,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # وظيفة لبدء البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('يا هلا بالغالي .... دزلي الرابط حتى ادزلك الملف الصوتي .')
+    await update.message.reply_text('مرحبًا! أرسل رابط يوتيوب لتحميل الملف الصوتي.')
 
 # وظيفة لمعالجة الأخطاء
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
