@@ -4,6 +4,9 @@ FROM python:3.9-slim
 # تثبيت ffmpeg
 RUN apt-get update && apt-get install -y ffmpeg
 
+# إنشاء مجلد downloads
+RUN mkdir -p /app/downloads
+
 # تعيين مجلد العمل
 WORKDIR /app
 
