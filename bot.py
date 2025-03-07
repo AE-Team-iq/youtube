@@ -27,6 +27,10 @@ if not YOUTUBE_API_KEY:
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# وظيفة لتنظيف اسم الملف
+def sanitize_filename(filename):
+    return re.sub(r'[\\/*?:"<>|]', "", filename)
+
 # وظيفة لاستخراج معرف الفيديو من رابط اليوتيوب
 def extract_video_id(youtube_url):
     regex = r'(?:v=|\/)([0-9A-Za-z_-]{11}).*'
@@ -49,21 +53,40 @@ def get_video_info(video_id):
 
 # وظيفة لتحميل الملف من اليوتيوب باستخدام yt-dlp
 def download_youtube_audio(url):
-     ydl_opts = {
-        'format': 'bestaudio/best',
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'ffmpeg_location': '/usr/bin/ffmpeg',
-        'cookiefile': 'cookies.txt',  # أضف هذا السطر
-    }
-     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(url, download=True)
-        file_path = ydl.prepare_filename(info_dict)
-        return file_path
+    try:
+        # إنشاء مجلد downloads إذا لم يكن موجودًا
+        if not os.path.exists('downloads'):
+            os.makedirs('downloads')
+
+        # إعداد خيارات yt-dlp
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'outtmpl': 'downloads/%(title)s.%(ext)s',
+            'ffmpeg_location': '/usr/bin/ffmpeg',
+        }
+
+        # استخدام ملف cookies.txt إذا كان موجودًا
+        if os.path.exists('cookies.txt'):
+            ydl_opts['cookiefile'] = 'cookies.txt'
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info_dict)
+            
+            # تنظيف اسم الملف
+            base, ext = os.path.splitext(file_path)
+            new_file = sanitize_filename(base) + ext
+            os.rename(file_path, new_file)
+            
+            return new_file
+    except Exception as e:
+        logger.error(f"حدث خطأ أثناء تحميل الملف: {e}")
+        return None
 
 # وظيفة لإرسال الملف إلى القناة
 async def send_audio_to_channel(context, audio_file):
@@ -137,9 +160,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         try:
             audio_file = download_youtube_audio(youtube_url)
-            file_id = await send_audio_to_channel(context, audio_file)
-            save_to_db(youtube_url, file_id, os.path.basename(audio_file))
-            await update.message.reply_text(f"تم تحميل الملف: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
+            if audio_file:
+                file_id = await send_audio_to_channel(context, audio_file)
+                save_to_db(youtube_url, file_id, os.path.basename(audio_file))
+                await update.message.reply_text(f"تم تحميل الملف: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
+            else:
+                await update.message.reply_text("حدث خطأ أثناء تحميل الملف.")
         except Exception as e:
             logger.error(f"Error: {e}")
             await update.message.reply_text("حدث خطأ أثناء تحميل الملف.")
