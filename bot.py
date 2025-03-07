@@ -23,13 +23,16 @@ YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 if not YOUTUBE_API_KEY:
     raise ValueError("YouTube API key is missing. Please set YOUTUBE_API_KEY in .env file.")
 
+# إعدادات ملفات تعريف الارتباط (cookies)
+COOKIES_CONTENT = os.getenv('COOKIES_CONTENT')
+
 # إعدادات التسجيل
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # وظيفة لتنظيف اسم الملف
 def sanitize_filename(filename):
-    return re.sub(r'[\\/*?:"<>|]', "", filename)
+    return re.sub(r'[\\/*?:"<>|]', "_", filename)
 
 # وظيفة لاستخراج معرف الفيديو من رابط اليوتيوب
 def extract_video_id(youtube_url):
@@ -58,6 +61,13 @@ def download_youtube_audio(url):
         if not os.path.exists('downloads'):
             os.makedirs('downloads')
 
+        # إنشاء ملف cookies.txt مؤقتًا إذا كان COOKIES_CONTENT موجودًا
+        cookies_file = None
+        if COOKIES_CONTENT:
+            cookies_file = 'cookies.txt'
+            with open(cookies_file, 'w') as f:
+                f.write(COOKIES_CONTENT)
+
         # إعداد خيارات yt-dlp
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -71,8 +81,8 @@ def download_youtube_audio(url):
         }
 
         # استخدام ملف cookies.txt إذا كان موجودًا
-        if os.path.exists('cookies.txt'):
-            ydl_opts['cookiefile'] = 'cookies.txt'
+        if cookies_file:
+            ydl_opts['cookiefile'] = cookies_file
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
@@ -80,13 +90,19 @@ def download_youtube_audio(url):
             
             # تنظيف اسم الملف
             base, ext = os.path.splitext(file_path)
-            new_file = sanitize_filename(base) + ext
+            new_file = os.path.join('downloads', sanitize_filename(os.path.basename(base)) + ext)
+            
+            # نقل الملف إلى المسار الجديد
             os.rename(file_path, new_file)
             
             return new_file
     except Exception as e:
         logger.error(f"حدث خطأ أثناء تحميل الملف: {e}")
         return None
+    finally:
+        # حذف ملف cookies.txt المؤقت بعد الانتهاء
+        if cookies_file and os.path.exists(cookies_file):
+            os.remove(cookies_file)
 
 # وظيفة لإرسال الملف إلى القناة
 async def send_audio_to_channel(context, audio_file):
