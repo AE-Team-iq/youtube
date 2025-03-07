@@ -60,7 +60,7 @@ def download_youtube_audio(url):
         'ffmpeg_location': '/usr/bin/ffmpeg',
         'cookiefile': 'cookies.txt',  # أضف هذا السطر
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=True)
         file_path = ydl.prepare_filename(info_dict)
         return file_path
