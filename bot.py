@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
@@ -23,6 +24,14 @@ YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 # إعدادات التسجيل
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# وظيفة لاستخراج معرف الفيديو من رابط اليوتيوب
+def extract_video_id(youtube_url):
+    regex = r'(?:v=|\/)([0-9A-Za-z_-]{11}).*'
+    match = re.search(regex, youtube_url)
+    if match:
+        return match.group(1)
+    return None
 
 # وظيفة للحصول على معلومات الفيديو باستخدام YouTube Data API
 def get_video_info(video_id):
@@ -105,7 +114,12 @@ def check_db(youtube_url):
 # وظيفة لمعالجة الرسائل
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     youtube_url = update.message.text
-    video_id = youtube_url.split('v=')[1]  # استخراج معرف الفيديو من الرابط
+
+    # استخراج معرف الفيديو من الرابط
+    video_id = extract_video_id(youtube_url)
+    if not video_id:
+        await update.message.reply_text("رابط اليوتيوب غير صالح.")
+        return
 
     # الحصول على معلومات الفيديو باستخدام YouTube Data API
     video_info = get_video_info(video_id)
