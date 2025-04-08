@@ -16,7 +16,7 @@ load_dotenv()
 required_env_vars = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHANNEL_ID', 'DATABASE_URL', 'YOUTUBE_API_KEY']
 missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 if missing_vars:
-    raise ValueError(f"Missing env vars: {', '.join(missing_vars)}")
+    raise ValueError(f"Missing environment variables: {', '.join(missing_vars)}")
 
 # الإعدادات
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -52,22 +52,23 @@ def download_youtube_audio(url):
             with open(cookies_file, 'w') as f:
                 f.write(COOKIES_CONTENT)
 
+        # إعدادات yt-dlp مع تصحيح ffmpeg_location
         ydl_opts = {
             'format': 'bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
-                'ffmpeg_location': '/usr/bin/ffmpeg',
-                'options': ['-loglevel', 'verbose']  # إضافة تفاصيل التحويل
             }],
+            'ffmpeg_location': '/usr/bin/ffmpeg',  # ✅ في الإعدادات الرئيسية
             'outtmpl': os.path.join(DOWNLOADS_DIR, '%(title)s.%(ext)s'),
             'no-check-certificate': True,
             'force_generic_extractor': True,
             'cookiefile': cookies_file,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
+            },
+            'verbose': True  # لعرض تفاصيل التحويل
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -78,7 +79,7 @@ def download_youtube_audio(url):
             safe_filename = sanitize_filename(original_filename)
             os.rename(original_filename, safe_filename)
             
-            # التحويل إلى MP3
+            # تحويل الامتداد إلى MP3
             new_file = os.path.join(DOWNLOADS_DIR, f"{uuid.uuid4()}.mp3")
             os.rename(f"{os.path.splitext(safe_filename)[0]}.mp3", new_file)
             
@@ -89,29 +90,21 @@ def download_youtube_audio(url):
         return None
 
     finally:
+        # حذف الملفات المؤقتة
         if cookies_file and os.path.exists(cookies_file):
             os.remove(cookies_file)
         for fname in os.listdir(DOWNLOADS_DIR):
-            if fname.endswith('.part') or fname.endswith('.ytdl'):
+            if fname.endswith(('.part', '.ytdl', '.webm')):
                 os.remove(os.path.join(DOWNLOADS_DIR, fname))
 
-# بقية الدوال (الاتصال بقاعدة البيانات، إرسال الملف، إلخ) كما هي...
-# وظيفة لإرسال الملف إلى القناة
-async def send_audio_to_channel(context, audio_file):
-    with open(audio_file, 'rb') as audio:
-        message = await context.bot.send_audio(chat_id=TELEGRAM_CHANNEL_ID, audio=audio)
-    return message.audio.file_id
-
-# وظيفة للاتصال بقاعدة البيانات مع معالجة الأخطاء
+# وظائف قاعدة البيانات
 def connect_to_db():
     try:
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-        return conn
+        return psycopg2.connect(DATABASE_URL, sslmode='require')
     except Exception as e:
-        logger.error(f"Database connection error: {e}")
+        logger.error(f"Database error: {e}")
         raise
 
-# إنشاء الجدول إذا لم يكن موجودًا
 def create_table():
     try:
         conn = connect_to_db()
@@ -119,7 +112,7 @@ def create_table():
         cur.execute("""
             CREATE TABLE IF NOT EXISTS audio_files (
                 id SERIAL PRIMARY KEY,
-                youtube_url TEXT NOT NULL UNIQUE,
+                youtube_url TEXT UNIQUE NOT NULL,
                 file_id TEXT NOT NULL,
                 file_name TEXT NOT NULL
             );
@@ -130,7 +123,6 @@ def create_table():
     except Exception as e:
         logger.error(f"Error creating table: {e}")
 
-# حفظ المعلومات في قاعدة البيانات
 def save_to_db(youtube_url, file_id, file_name):
     try:
         conn = connect_to_db()
@@ -146,7 +138,6 @@ def save_to_db(youtube_url, file_id, file_name):
     except Exception as e:
         logger.error(f"Error saving to DB: {e}")
 
-# التحقق من وجود الملف في قاعدة البيانات
 def check_db(youtube_url):
     try:
         conn = connect_to_db()
@@ -160,7 +151,7 @@ def check_db(youtube_url):
         logger.error(f"Error checking DB: {e}")
         return None
 
-# معالجة الرسائل الواردة
+# معالجة الرسائل
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     youtube_url = update.message.text.strip()
     if not youtube_url:
@@ -172,20 +163,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("رابط اليوتيوب غير صالح.")
         return
 
-    # التحقق من قاعدة البيانات أولًا
     file_id = check_db(youtube_url)
     if file_id:
         await update.message.reply_text(f"الملف موجود بالفعل: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
         return
 
-    # تحميل الملف من اليوتيوب
     audio_file = download_youtube_audio(youtube_url)
     if not audio_file:
         await update.message.reply_text("فشل في تحميل الملف من اليوتيوب.")
         return
 
     try:
-        # إرسال الملف إلى القناة
         file_id = await send_audio_to_channel(context, audio_file)
         save_to_db(youtube_url, file_id, os.path.basename(audio_file))
         await update.message.reply_text(f"تم تحميل الملف: https://t.me/{TELEGRAM_CHANNEL_ID}/{file_id}")
@@ -193,31 +181,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error sending to channel: {e}")
         await update.message.reply_text("حدث خطأ أثناء رفع الملف إلى القناة.")
     finally:
-        # حذف الملف بعد الإرسال
         if os.path.exists(audio_file):
             os.remove(audio_file)
 
-# وظيفة بدء البوت
+async def send_audio_to_channel(context, audio_file):
+    with open(audio_file, 'rb') as audio:
+        message = await context.bot.send_audio(chat_id=TELEGRAM_CHANNEL_ID, audio=audio)
+    return message.audio.file_id
+
+# وظائف البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('مرحبًا! أرسل رابط يوتيوب لتحميل الملف الصوتي.')
 
-# معالجة الأخطاء العامة
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
 
 # الوظيفة الرئيسية
 def main():
-    create_table()  # إنشاء الجدول عند التشغيل
+    create_table()
 
-    # إعداد البوت
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-    # إضافة الـ handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_error_handler(error)
 
-    # تشغيل البوت
     application.run_polling()
 
 if __name__ == '__main__':
