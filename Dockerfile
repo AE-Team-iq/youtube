@@ -1,20 +1,9 @@
-# استخدام صورة أساسية تحتوي على Python
 FROM python:3.9-slim
 
-# تثبيت ffmpeg
 RUN apt-get update && apt-get install -y ffmpeg
 
-# إنشاء مجلد downloads
-RUN mkdir -p /app/downloads
-
-# تعيين مجلد العمل
 WORKDIR /app
-
-# نسخ ملفات المشروع إلى الحاوية
 COPY . .
+RUN pip install -r requirements.txt
 
-# تثبيت المتطلبات
-RUN pip install --no-cache-dir -r requirements.txt
-
-# تشغيل البوت
 CMD ["python", "main.py"]
