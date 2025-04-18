@@ -7,9 +7,9 @@ from telegram.ext import (
     Updater,
     CommandHandler,
     MessageHandler,
-    Filters,
     CallbackContext,
-    CallbackQueryHandler
+    CallbackQueryHandler,
+    filters
 )
 from datetime import datetime
 import psycopg2
@@ -226,7 +226,7 @@ def main() -> None:
     
     # تسجيل المعالجات
     dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     dispatcher.add_error_handler(error_handler)
     
     # بدء البوت
